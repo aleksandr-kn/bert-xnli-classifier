@@ -6,6 +6,9 @@ train_model.py
 Использование трансформеров (BERT, RuBERT) для классификации по датасету XNLI
 Попытка решения задачи NLI (определения наличия противоречий в тесте)
 """
+from datetime import datetime
+import os
+
 import pandas as pd
 import torch
 from datasets import Dataset, DatasetDict
@@ -100,9 +103,15 @@ def main():
     trainer.train()
 
     # Сохранение модели
-    trainer.save_model(OUTPUT_DIR)
-    tokenizer.save_pretrained(OUTPUT_DIR)
-    print(f"Модель и токенизатор сохранены в {OUTPUT_DIR}")
+
+    # timestamp вида: 2025-11-29_17-42-10
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    save_path = os.path.join(OUTPUT_DIR, timestamp)
+    os.makedirs(save_path, exist_ok=True)
+
+    trainer.save_model(save_path)
+    tokenizer.save_pretrained(save_path)
+    print(f"Модель и токенизатор сохранены в {save_path}")
 
     # Предсказания
     raw_preds = trainer.predict(test_dataset)
