@@ -1,0 +1,21 @@
+# IDEs
+.idea/
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Датасета и т.д. весят слишком много для github
+data/
+
+# Запуски pipeline-а
+outputs/
+
+# Сторонние модели (весят слишком много для github)
+pretrained/
+
+# Виртуальные окружение под разные версии python
+/venv311
+/venv
+/tf_gpu_env
+/venv_gpu
