@@ -29,12 +29,15 @@ TEST_PATH = "data/xnli/ru/test-00000-of-00001.parquet"
 VAL_PATH = "data/xnli/ru/validation-00000-of-00001.parquet"
 OUTPUT_DIR = './outputs'
 DEVICE = torch.device("cuda")  #"cuda", "cpu", "mps"
-BATCH_SIZE = 48
-EPOCHS = 3
+BATCH_SIZE = 20
+EPOCHS = 8
 NUM_LABELS = 3
 MAX_LEN = 256
-MODEL_NAME = "DeepPavlov/rubert-base-cased"
+MODEL_NAME = "ai-forever/ruBert-large" # 24 слоя, 'LARGE' BERT модель
+# MODEL_NAME = "DeepPavlov/rubert-base-cased"
+# MODEL_NAME = "DeepPavlov/rubert-base-cased-conversational"
 # MODEL_NAME = "DeepPavlov/rubert-base-cased-sentence" # Можно попробовать и эту модель
+# MODEL_NAME = "sberbank-ai/sbert_large_nlu_ru" # 24 слоя, 'LARGE' BERT модель
 
 # Функция загрузки данных из датасета xnli
 def load_xnli(file_path):
@@ -72,22 +75,30 @@ def main():
     test_dataset  = Dataset.from_dict({**test_enc, "labels": list(test_df.label)})
 
     # Модель
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=NUM_LABELS)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        MODEL_NAME,
+        num_labels=NUM_LABELS,
+        hidden_dropout_prob = 0.2,
+    )
 
     # Training arguments
     training_args = TrainingArguments(
         num_train_epochs=EPOCHS,
         per_device_train_batch_size=BATCH_SIZE,
         per_device_eval_batch_size=BATCH_SIZE,
-        learning_rate=2e-5,
+        learning_rate=1.5e-5,
         weight_decay=0.05,
-        warmup_ratio=0.1,
+        warmup_ratio=0.06,
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
         output_dir=OUTPUT_DIR,
         logging_dir='./outputs/logs',
         report_to="none",
+
+        # fp16
+        fp16=True,
+        fp16_opt_level="O1",
     )
 
     # Trainer
@@ -106,7 +117,8 @@ def main():
 
     # timestamp вида: 2025-11-29_17-42-10
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_path = os.path.join(OUTPUT_DIR, timestamp)
+    save_path = os.path.join(OUTPUT_DIR, 'models')
+    save_path = os.path.join(save_path, timestamp)
     os.makedirs(save_path, exist_ok=True)
 
     trainer.save_model(save_path)
