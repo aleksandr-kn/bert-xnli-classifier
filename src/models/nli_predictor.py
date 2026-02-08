@@ -8,6 +8,10 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 class NLIPredictor:
+    """
+        Универсальный класс predictor-а.
+        Подаем любую модель сюда, получаем результат.
+    """
     def __init__(self, model_dir, max_len = 256, device=None):
         # Ожидается стандартная структура сохранённой модели HuggingFace
         # (результат model.save_pretrained() + tokenizer.save_pretrained()):
@@ -58,7 +62,7 @@ class NLIPredictor:
                 [p[1] for p in batch],
                 padding=True,
                 truncation=True,
-                max_length=MAX_LEN,
+                max_length=self.max_len,
                 return_tensors="pt"
             )
             enc = {k: v.to(self.device) for k, v in enc.items()}
