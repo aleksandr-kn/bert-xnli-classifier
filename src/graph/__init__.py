@@ -3,6 +3,7 @@ from src.graph.builder import (
     LABEL_ID,
     build_sentence_pairs,
     build_relation_map,
+    select_candidates,
     build_nli_graph,
     graph_from_text,
 )

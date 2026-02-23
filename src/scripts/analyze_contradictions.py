@@ -25,12 +25,18 @@ from src.graph.visualization import (
 )
 
 # === Конфигурация ===
-MODEL_DIR = "outputs/models/2026-02-04_07-13-03"
+MODEL_DIR = "outputs/models/xnli_rubert-base-cased-conversational_2025-12-27_19-07-06" # Пока-что лучшая модель.
+# MODEL_DIR = "outputs/models/ruwanli_ai-forever_ruBert-large_2026-02-21_17-07-50"
+# MODEL_DIR = "outputs/models/xnli_ai-forever_ruBert-large_2026-02-09_00-21-03"
 TEST_DATA_PATH = "data/tests/test_graphs_4.csv"
 MAX_LEN = 256
 
+# LLM-верификатор: задать имя модели для включения, None для отключения
+LLM_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
+# LLM_MODEL_NAME = None
 
-def print_report(report: ContradictionReport, text_idx: int = 0):
+
+def print_report(report: ContradictionReport, text_idx: int = 0, graph=None):
     """Форматированный вывод отчёта об анализе противоречий."""
 
     print(f"\n{'='*60}")
@@ -43,9 +49,32 @@ def print_report(report: ContradictionReport, text_idx: int = 0):
 
     print(f"\nПар с противоречием: {len(report.contradiction_pairs)}")
     for i, j, p in report.contradiction_pairs:
-        print(f"  [{i} -> {j}] P_contradiction = {p:.3f}")
+        llm_tag = ""
+        llm_reasoning = None
+        if graph is not None and graph.has_edge(i, j):
+            edge_data = graph.edges[i, j]
+            if edge_data.get("llm_verified", False):
+                llm_tag = " [LLM verified]"
+                llm_reasoning = edge_data.get("llm_reasoning")
+        print(f"  [{i} -> {j}] P_contradiction = {p:.3f}{llm_tag}")
         print(f"    premise:    {report.sentences[i]}")
         print(f"    hypothesis: {report.sentences[j]}")
+        if llm_reasoning:
+            print(f"    LLM reasoning: {llm_reasoning}")
+
+    # Пары, где LLM отменила contradiction от BERT
+    if graph is not None:
+        overridden = []
+        for (u, v), data in graph.edges.items():
+            if data.get("llm_verified") and data["label"] != "contradiction":
+                overridden.append((u, v, data))
+        if overridden:
+            print(f"\nLLM отменила contradiction ({len(overridden)}):")
+            for u, v, data in overridden:
+                print(f"  [{u} -> {v}] BERT: contradiction -> LLM: {data['label']}")
+                print(f"    premise:    {report.sentences[u]}")
+                print(f"    hypothesis: {report.sentences[v]}")
+                print(f"    LLM reasoning: {data.get('llm_reasoning', '')}")
 
     if report.core_node is not None:
         print(f"\n--- ЯДРО ПРОТИВОРЕЧИЙ ---")
@@ -67,17 +96,26 @@ def print_report(report: ContradictionReport, text_idx: int = 0):
 
 def main():
     predictor = NLIPredictor(MODEL_DIR, max_len=MAX_LEN)
+
+    # Создаём LLM-верификатор, если задано имя модели
+    verifier = None
+    if LLM_MODEL_NAME:
+        from src.models.llm_verifier import LLMVerifier
+        print(f"Загрузка LLM-верификатора: {LLM_MODEL_NAME} ...")
+        verifier = LLMVerifier(LLM_MODEL_NAME)
+        print("LLM-верификатор загружен.")
+
     test_df = load_dataset(TEST_DATA_PATH)
 
     for row_idx, text in enumerate(test_df["text"]):
-        # 1. Строим граф
-        G, sentences = graph_from_text(text, predictor)
+        # 1. Строим граф (с LLM-верификацией, если verifier задан)
+        G, sentences = graph_from_text(text, predictor, verifier=verifier)
 
         # 2. Анализируем противоречия
         report = analyze_contradictions(G, sentences, strategy="weighted")
 
         # 3. Выводим отчёт
-        print_report(report, text_idx=row_idx)
+        print_report(report, text_idx=row_idx, graph=G)
 
         # 4. Визуализация: полный граф с выделением ядра
         highlight = {report.core_node} if report.core_node is not None else None
