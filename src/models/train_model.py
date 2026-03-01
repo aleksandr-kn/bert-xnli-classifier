@@ -15,7 +15,6 @@ from datasets import Dataset, DatasetDict
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments, EarlyStoppingCallback
 
 import numpy as np
-import torch
 import torch.nn.functional as F
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
