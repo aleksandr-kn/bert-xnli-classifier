@@ -50,7 +50,11 @@ def extract_subgraph_by_label(G, label="contradiction", use_weight=True):
         if data.get("label") == label:
             edge_attrs = {"label": data["label"], "proba": data["proba"]}
             if use_weight:
-                edge_attrs["weight"] = float(data["proba"][2])
+                p_contr = float(data["proba"][2])
+                edge_attrs["weight"] = p_contr
+                # distance — инверсия для алгоритмов кратчайших путей
+                # (betweenness centrality), где меньший вес = ближе
+                edge_attrs["distance"] = 1.0 - p_contr
             sub.add_edge(u, v, **edge_attrs)
 
     # Удаляем изолированные узлы (без рёбер противоречий)
@@ -70,7 +74,7 @@ def compute_centrality_metrics(subgraph):
         return {}, {}
 
     degree = nx.degree_centrality(subgraph)
-    betweenness = nx.betweenness_centrality(subgraph, weight="weight")
+    betweenness = nx.betweenness_centrality(subgraph, weight="distance")
 
     return degree, betweenness
 

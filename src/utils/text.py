@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import re
+from razdel import sentenize
 
 
 def split_sentences(text: str) -> list[str]:
-    """Разбивает текст на предложения по знакам препинания (.!?)."""
-    return [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+    """Разбивает текст на предложения (razdel - сегментация для русского языка)."""
+    return [sent.text for sent in sentenize(text)]

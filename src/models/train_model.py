@@ -54,7 +54,38 @@ def tokenize_fn(df, tokenizer):
         max_length=MAX_LEN
     )
 
-# Тут основная логика
+# Метрики для Trainer (вызывается каждую эпоху на eval_dataset)
+def compute_metrics(pred):
+    y_true = pred.label_ids
+    y_pred = np.argmax(pred.predictions, axis=1)
+
+    proba_tensor = F.softmax(torch.tensor(pred.predictions), dim=1)
+    y_proba_multi = proba_tensor.numpy()
+
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred, average='macro')
+    rec = recall_score(y_true, y_pred, average='macro')
+    f1 = f1_score(y_true, y_pred, average='macro')
+
+    y_true_bin = label_binarize(y_true, classes=[0, 1, 2])
+    roc_auc_val = roc_auc_score(y_true_bin, y_proba_multi, multi_class='ovr')
+
+    pr_auc_vals = []
+    for i in range(NUM_LABELS):
+        prec_vals, rec_vals, _ = precision_recall_curve(y_true_bin[:, i], y_proba_multi[:, i])
+        pr_auc_vals.append(auc(rec_vals, prec_vals))
+    pr_auc_val = np.mean(pr_auc_vals)
+
+    return {
+        "accuracy": acc,
+        "precision": prec,
+        "recall": rec,
+        "f1": f1,
+        "roc_auc": roc_auc_val,
+        "pr_auc": pr_auc_val,
+    }
+
+
 def main():
     # Загрузка данных
     train_df = load_xnli(TRAIN_PATH)
@@ -90,6 +121,7 @@ def main():
         warmup_ratio=0.06,
         eval_strategy="epoch",
         save_strategy="epoch",
+        save_total_limit=2,
         load_best_model_at_end=True,
         output_dir=OUTPUT_DIR,
         logging_dir='./outputs/logs',
@@ -106,6 +138,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
+        compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=2)]
     )
 
@@ -135,9 +168,9 @@ def main():
 
     # Метрики для multi-class
     acc = accuracy_score(y_test, y_pred)
-    prec = precision_score(y_test, y_pred, average='weighted')
-    rec = recall_score(y_test, y_pred, average='weighted')
-    f1 = f1_score(y_test, y_pred, average='weighted')
+    prec = precision_score(y_test, y_pred, average='macro')
+    rec = recall_score(y_test, y_pred, average='macro')
+    f1 = f1_score(y_test, y_pred, average='macro')
 
     # Для ROC AUC и PR AUC делаем one-hot бинаризацию меток
     y_test_bin = label_binarize(y_test, classes=[0, 1, 2])  # shape: [num_samples, 3]

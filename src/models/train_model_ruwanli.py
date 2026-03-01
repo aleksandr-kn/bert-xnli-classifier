@@ -66,9 +66,9 @@ def compute_metrics(pred):
     y_proba_multi = proba_tensor.numpy()
 
     acc = accuracy_score(y_true, y_pred)
-    prec = precision_score(y_true, y_pred, average='weighted')
-    rec = recall_score(y_true, y_pred, average='weighted')
-    f1 = f1_score(y_true, y_pred, average='weighted')
+    prec = precision_score(y_true, y_pred, average='macro')
+    rec = recall_score(y_true, y_pred, average='macro')
+    f1 = f1_score(y_true, y_pred, average='macro')
 
     y_true_bin = label_binarize(y_true, classes=[0,1,2])
 
@@ -131,6 +131,7 @@ def main():
         warmup_ratio=0.06,
         eval_strategy="epoch",
         save_strategy="epoch",
+        save_total_limit=2,
         load_best_model_at_end=True,
         logging_dir=os.path.join(OUTPUT_DIR, "logs"),
         report_to="none",

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Импорты всякой шляпы, может нужно больше хз
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -72,7 +71,7 @@ class NLIPredictor:
                 logits = outputs.logits
                 proba = F.softmax(logits, dim=1)
 
-            all_preds.extend(torch.argmax(logits, dim=1).cpu().numpy())
+            all_preds.extend(torch.argmax(proba, dim=1).cpu().numpy())
             all_proba.extend(proba.cpu().numpy())
 
         return np.array(all_preds), np.array(all_proba)

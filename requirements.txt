@@ -9,3 +9,4 @@ scikit-learn>=1.5
 matplotlib>=3.8
 seaborn>=0.13
 networkx>=3.2
+razdel>=0.5
