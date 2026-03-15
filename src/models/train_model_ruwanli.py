@@ -21,11 +21,7 @@ from transformers import (
     TrainingArguments,
     EarlyStoppingCallback
 )
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, precision_recall_curve, auc
-)
-from sklearn.preprocessing import label_binarize
+from src.utils.metrics import compute_metrics
 
 # ========== Конфигурация ==========
 OUTPUT_DIR = './outputs'
@@ -56,38 +52,6 @@ def tokenize_with_labels(df, tokenizer):
     )
     enc['labels'] = torch.tensor(labels, dtype=torch.long)
     return enc
-
-# ========== Метрики ==========
-def compute_metrics(pred):
-    y_true = pred.label_ids
-    y_pred = np.argmax(pred.predictions, axis=1)
-
-    proba_tensor = F.softmax(torch.tensor(pred.predictions), dim=1)
-    y_proba_multi = proba_tensor.numpy()
-
-    acc = accuracy_score(y_true, y_pred)
-    prec = precision_score(y_true, y_pred, average='macro')
-    rec = recall_score(y_true, y_pred, average='macro')
-    f1 = f1_score(y_true, y_pred, average='macro')
-
-    y_true_bin = label_binarize(y_true, classes=[0,1,2])
-
-    roc_auc_val = roc_auc_score(y_true_bin, y_proba_multi, multi_class='ovr')
-
-    pr_auc_vals = []
-    for i in range(3):
-        prec_vals, rec_vals, _ = precision_recall_curve(y_true_bin[:, i], y_proba_multi[:, i])
-        pr_auc_vals.append(auc(rec_vals, prec_vals))
-    pr_auc_val = np.mean(pr_auc_vals)
-
-    return {
-        "accuracy": acc,
-        "precision": prec,
-        "recall": rec,
-        "f1": f1,
-        "roc_auc": roc_auc_val,
-        "pr_auc": pr_auc_val
-    }
 
 # ========== Основной скрипт ==========
 def main():

@@ -28,6 +28,8 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import label_binarize
 
+from src.utils.metrics import compute_metrics
+
 
 # === Константы ===
 MODEL_DIR = "outputs/models/2025-11-28_05-42-10"
