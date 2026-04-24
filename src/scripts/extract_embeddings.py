@@ -22,7 +22,6 @@ from transformers import AutoModel, AutoTokenizer
 BASE_MODEL_NAME = "ai-forever/ruBert-large"
 FINETUNED_MODEL_DIR = "outputs/models/xnli_ai-forever_ruBert-large_2026-02-09_00-21-03"
 OUTPUT_DIR = "outputs/embeddings"
-HF_CACHE_DIR = "F:/hf_cache"
 
 
 def extract_embeddings(model_name_or_path, cache_dir=None):
