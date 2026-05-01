@@ -1,21 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+/venv
+/venv311
+/tf_gpu_env
+/venv_gpu
+.venv/
+
 # IDEs
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 
-# MacOS
+# images
+/images
+/ideas
+4
+# OS
 .DS_Store
+Thumbs.db
+Desktop.ini
 
-# Датасета и т.д. весят слишком много для github
+# Jupyter
+.ipynb_checkpoints/
+
+# Данные и модели (слишком большие для github)
 data/
-
-# Запуски pipeline-а
 outputs/
-
-# Сторонние модели (весят слишком много для github)
 pretrained/
 
-# Виртуальные окружение под разные версии python
-/venv311
-/venv
-/tf_gpu_env
-/venv_gpu
+# Логи
+*.log
+
+# Environment
+.env
+.env.*
