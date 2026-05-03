@@ -138,15 +138,10 @@ def collect_from_corpus(corpus_path, predictor, verifier,
     """
     Весь корпус -> аккумулированные hard negatives + общая статистика.
 
-    Args:
-        corpus_path: путь к файлу с текстами (csv/parquet/etc.)
-        predictor: NLIPredictor
-        verifier: LLMVerifier
-        text_column: имя колонки с текстом
-        target_labels: метки для фильтрации кандидатов
-
-    Returns:
-        (all_hard_negatives, corpus_stats): список HardNegative и dict
+    Поддерживает два режима:
+    1. Режим текста (text_column): разбивает текст на предложения и проверяет все пары.
+    2. Режим готовых пар: если в файле есть колонки 'premise' и 'hypothesis',
+       использует их напрямую.
     """
     df = load_dataset(corpus_path)
 
@@ -160,25 +155,85 @@ def collect_from_corpus(corpus_path, predictor, verifier,
         "per_text": [],
     }
 
-    for row_idx, text in enumerate(df[text_column]):
-        print(f"\n--- Текст {row_idx + 1}/{len(df)} ---")
-        hard_negatives, stats = collect_from_text(
-            text, row_idx, predictor, verifier, target_labels
-        )
-        all_hard_negatives.extend(hard_negatives)
+    # ПРОВЕРКА РЕЖИМА: готовые пары или сырой текст
+    is_pair_mode = "premise" in df.columns and "hypothesis" in df.columns
 
-        corpus_stats["total_pairs"] += stats["total_pairs"]
-        corpus_stats["total_candidates"] += stats["candidates"]
-        corpus_stats["total_llm_calls"] += stats["llm_calls"]
-        corpus_stats["total_overrides"] += stats["overrides"]
-        corpus_stats["per_text"].append(stats)
+    if is_pair_mode:
+        print(f"Обнаружен режим готовых пар (premise/hypothesis).")
+        # Группируем пары (в RuWANLI они независимы, но для статистики считаем как один блок)
+        # Для простоты обрабатываем все пары сразу или батчами
+        pairs_data = []
+        for idx, row in df.iterrows():
+            pairs_data.append({
+                "premise": row["premise"],
+                "hypothesis": row["hypothesis"],
+                "bert_label": row["label"] if "label" in row else None,
+            })
+        
+        # Прогон через BERT
+        pairs = [(p["premise"], p["hypothesis"]) for p in pairs_data]
+        preds, probas = predictor.predict_batch(pairs)
+        
+        # Подготовка кандидатов для LLM
+        cand_indices = []
+        cand_data = []
+        target_labels = target_labels or [2]
+        
+        for i, (pred, proba) in enumerate(zip(preds, probas)):
+            if pred in target_labels:
+                cand_indices.append(i)
+                cand_data.append({
+                    "premise": pairs[i][0],
+                    "hypothesis": pairs[i][1],
+                    "bert_label": int(pred),
+                    "bert_proba": proba,
+                })
+        
+        corpus_stats["total_pairs"] = len(pairs)
+        corpus_stats["total_candidates"] = len(cand_indices)
+        
+        if cand_indices:
+            results = verifier.verify_batch(cand_data)
+            corpus_stats["total_llm_calls"] = len(results)
+            
+            for idx_in_cand, (llm_label, confidence, reasoning) in enumerate(results):
+                orig_idx = cand_indices[idx_in_cand]
+                if llm_label != cand_data[idx_in_cand]["bert_label"]:
+                    hn = HardNegative(
+                        premise=cand_data[idx_in_cand]["premise"],
+                        hypothesis=cand_data[idx_in_cand]["hypothesis"],
+                        bert_label=cand_data[idx_in_cand]["bert_label"],
+                        llm_label=llm_label,
+                        bert_proba=cand_data[idx_in_cand]["bert_proba"].tolist(),
+                        llm_reasoning=reasoning,
+                        source_text_idx=0, # В режиме пар индекс размыт
+                        sentence_i=orig_idx,
+                        sentence_j=0,
+                    )
+                    all_hard_negatives.append(hn)
+            
+            corpus_stats["total_overrides"] = len(all_hard_negatives)
+    else:
+        # СТАНДАРТНЫЙ РЕЖИМ: разбиение текста на предложения
+        for row_idx, text in enumerate(df[text_column]):
+            print(f"\n--- Текст {row_idx + 1}/{len(df)} ---")
+            hard_negatives, stats = collect_from_text(
+                text, row_idx, predictor, verifier, target_labels
+            )
+            all_hard_negatives.extend(hard_negatives)
 
-        print(f"  Пар: {stats['total_pairs']}, "
-              f"кандидатов: {stats['candidates']}, "
-              f"overrides: {stats['overrides']}")
+            corpus_stats["total_pairs"] += stats["total_pairs"]
+            corpus_stats["total_candidates"] += stats["candidates"]
+            corpus_stats["total_llm_calls"] += stats["llm_calls"]
+            corpus_stats["total_overrides"] += stats["overrides"]
+            corpus_stats["per_text"].append(stats)
+
+            print(f"  Пар: {stats['total_pairs']}, "
+                f"кандидатов: {stats['candidates']}, "
+                f"overrides: {stats['overrides']}")
 
     print(f"\n=== Итого по корпусу ===")
-    print(f"  Текстов: {corpus_stats['num_texts']}")
+    print(f"  Режим: {'Пары' if is_pair_mode else 'Текст'}")
     print(f"  Всего пар: {corpus_stats['total_pairs']}")
     print(f"  Кандидатов для LLM: {corpus_stats['total_candidates']}")
     print(f"  LLM overrides: {corpus_stats['total_overrides']}")

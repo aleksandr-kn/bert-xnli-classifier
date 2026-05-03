@@ -199,7 +199,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
     print(f"  Отчет: {os.path.join(run_dir, 'REPORT.md')}")
     print(f"{'='*60}")
 
-    return results
+    return results, run_dir
 
 
 def generate_markdown_report(results, config, run_dir):
