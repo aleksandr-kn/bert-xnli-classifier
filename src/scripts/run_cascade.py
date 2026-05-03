@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
+# ВАЖНО: Устанавливаем кеш до импорта любых библиотек transformers/huggingface
+os.environ["HF_HOME"] = "F:/huggingface_cache"
+os.environ["TRANSFORMERS_CACHE"] = "F:/huggingface_cache"
+
 """
 Точка входа для запуска self-improving cascade.
 

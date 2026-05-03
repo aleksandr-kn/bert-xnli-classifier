@@ -9,6 +9,10 @@ BERT-модель используется как быстрый фильтр д
 выполняя пошаговое рассуждение с учётом полного контекста.
 """
 
+import os
+# Перенаправляем кеш Hugging Face на диск F: для экономии места на C:
+os.environ["HF_HOME"] = "F:/huggingface_cache"
+
 import re
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
