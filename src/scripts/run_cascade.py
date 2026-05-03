@@ -14,11 +14,15 @@ os.environ["TRANSFORMERS_CACHE"] = "F:/huggingface_cache"
 """
 
 import os
+from src.utils.model_registry import get_model_path
 from src.cascade.engine import run_cascade
 from src.cascade.visualization import plot_convergence, print_convergence_table
 
 # === Конфигурация ===
-INITIAL_MODEL_DIR = "outputs/models/xnli_rubert-base-cased-conversational_2025-12-27_19-07-06"
+# Используем лучшую модель из реестра
+INITIAL_MODEL_DIR = get_model_path("rubert-large-xnli")
+BASE_MODEL_NAME = "ai-forever/ruBert-large" 
+
 CORPUS_PATH = "data/ruwanli_subset_test.csv"  # Подмножество RuWANLI
 LLM_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 MAX_ITERATIONS = 3  # Для теста достаточно 3 итераций
@@ -29,6 +33,7 @@ def main():
     # Запуск каскада
     results, run_dir = run_cascade(
         initial_model_dir=INITIAL_MODEL_DIR,
+        base_model_name=BASE_MODEL_NAME,
         corpus_path=CORPUS_PATH,
         llm_model_name=LLM_MODEL_NAME,
         max_iterations=MAX_ITERATIONS,

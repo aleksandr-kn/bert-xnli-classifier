@@ -33,6 +33,7 @@ class IterationResult:
 
 
 def run_cascade(initial_model_dir, corpus_path, llm_model_name,
+                base_model_name="ai-forever/ruBert-large",
                 max_iterations=5, convergence_threshold=0.001,
                 from_scratch=True, target_labels=None,
                 text_column="text"):
@@ -51,9 +52,10 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
     4. Сохраняет JSON-лог и генерирует итоговый Markdown-отчет (REPORT.md).
 
     Args:
-        initial_model_dir: путь к начальной модели BERT.
+        initial_model_dir: путь к начальной модели BERT (чекпоинт, обученный на XNLI).
         corpus_path: путь к корпусу текстов.
         llm_model_name: имя LLM для верификации (например, Qwen/Qwen2.5-7B-Instruct).
+        base_model_name: имя чистой базовой архитектуры для обучения (например, ai-forever/ruBert-large).
         max_iterations: максимум итераций.
         convergence_threshold: порог delta F1 для остановки.
         from_scratch: True = обучение с нуля каждую итерацию (рекомендуется),
@@ -62,7 +64,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
         text_column: имя колонки с текстом в корпусе.
 
     Returns:
-        list[IterationResult]: результаты каждой итерации.
+        tuple[list[IterationResult], str]: результаты каждой итерации и путь к папке эксперимента.
     """
     # Создаем уникальную папку для запуска эксперимента
     timestamp_run = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -73,6 +75,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
     config = {
         "run_id": timestamp_run,
         "initial_model_dir": initial_model_dir,
+        "base_model_name": base_model_name,
         "corpus_path": corpus_path,
         "llm_model_name": llm_model_name,
         "max_iterations": max_iterations,
@@ -149,6 +152,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
         train_result = train_iteration(
             iteration_num=iteration,
             hard_negative_paths=all_hn_paths,
+            base_model_name=base_model_name,
             from_checkpoint=from_checkpoint,
         )
 
