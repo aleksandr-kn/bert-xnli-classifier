@@ -37,37 +37,41 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
                 from_scratch=True, target_labels=None,
                 text_column="text"):
     """
-    Главный цикл self-improving cascade.
+    Главный цикл self-improving cascade с расширенным логированием.
 
-    1. Загружает LLM-верификатор (один раз на весь каскад)
-    2. На каждой итерации:
-       a. Создает NLIPredictor из текущей модели
-       b. Собирает hard negatives из корпуса
-       c. Сохраняет HN в parquet
-       d. Если overrides == 0 -> конвергенция
-       e. Обучает BERT на расширенном датасете
-       f. Проверяет delta F1 < threshold
-    3. Сохраняет лог каскада
+    1. Создает уникальную папку эксперимента для изоляции результатов.
+    2. Загружает LLM-верификатор (один раз на весь каскад).
+    3. На каждой итерации:
+       a. Создает NLIPredictor из текущей модели.
+       b. Собирает hard negatives из корпуса (BERT предсказывает -> LLM верифицирует).
+       c. Сохраняет HN в CSV для удобного анализа.
+       d. Если overrides == 0 (нет расхождений) -> конвергенция.
+       e. Обучает BERT на расширенном датасете (XNLI + накопленные HN).
+       f. Проверяет delta F1 < threshold для остановки.
+    4. Сохраняет JSON-лог и генерирует итоговый Markdown-отчет (REPORT.md).
 
     Args:
-        initial_model_dir: путь к начальной модели BERT
-        corpus_path: путь к корпусу текстов
-        llm_model_name: имя LLM для верификации
-        max_iterations: максимум итераций
-        convergence_threshold: порог delta F1 для остановки
-        from_scratch: True = обучение с нуля каждую итерацию,
-                      False = continual fine-tuning от предыдущей итерации
-        target_labels: метки для фильтрации кандидатов (по умолчанию [2])
-        text_column: имя колонки с текстом в корпусе
+        initial_model_dir: путь к начальной модели BERT.
+        corpus_path: путь к корпусу текстов.
+        llm_model_name: имя LLM для верификации (например, Qwen/Qwen2.5-7B-Instruct).
+        max_iterations: максимум итераций.
+        convergence_threshold: порог delta F1 для остановки.
+        from_scratch: True = обучение с нуля каждую итерацию (рекомендуется),
+                      False = continual fine-tuning от предыдущей итерации.
+        target_labels: метки для фильтрации кандидатов (по умолчанию [2] - contradiction).
+        text_column: имя колонки с текстом в корпусе.
 
     Returns:
-        list[IterationResult]
+        list[IterationResult]: результаты каждой итерации.
     """
-    cascade_dir = os.path.join("outputs", "cascade")
-    hn_dir = os.path.join(cascade_dir, "hard_negatives")
+    # Создаем уникальную папку для запуска эксперимента
+    timestamp_run = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = os.path.join("outputs", "cascade", f"run_{timestamp_run}")
+    hn_dir = os.path.join(run_dir, "hard_negatives")
     os.makedirs(hn_dir, exist_ok=True)
 
     config = {
+        "run_id": timestamp_run,
         "initial_model_dir": initial_model_dir,
         "corpus_path": corpus_path,
         "llm_model_name": llm_model_name,
@@ -111,7 +115,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
         torch.cuda.empty_cache()
 
         # c. Сохраняем hard negatives
-        hn_path = os.path.join(hn_dir, f"iter_{iteration}.parquet")
+        hn_path = os.path.join(hn_dir, f"iter_{iteration}.csv")
         save_hard_negatives(hard_negatives, hn_path)
         all_hn_paths.append(hn_path)
 
@@ -120,7 +124,8 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
         if total_overrides == 0:
             print(f"\nКонвергенция: LLM не нашла расхождений с BERT.")
             stop_reason = "no_overrides"
-
+            
+            # Сохраняем финальный результат
             result = IterationResult(
                 iteration=iteration,
                 model_path=current_model_dir,
@@ -139,6 +144,7 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
         torch.cuda.empty_cache()
 
         # f. Обучение BERT
+        # Передаем run_dir чтобы trainer сохранял модели внутри папки эксперимента
         from_checkpoint = None if from_scratch else current_model_dir
         train_result = train_iteration(
             iteration_num=iteration,
@@ -177,19 +183,64 @@ def run_cascade(initial_model_dir, corpus_path, llm_model_name,
             verifier = LLMVerifier(llm_model_name)
             print("LLM-верификатор загружен.")
 
-    # Сохраняем лог каскада
+    # Сохраняем логи и генерируем отчет
     config["stop_reason"] = stop_reason
-    log_path = os.path.join(cascade_dir, "cascade_log.json")
+    log_path = os.path.join(run_dir, "cascade_log.json")
     save_cascade_log(results, config, log_path)
+    
+    # Генерация Markdown-отчета
+    generate_markdown_report(results, config, run_dir)
 
     print(f"\n{'='*60}")
     print(f"  КАСКАД ЗАВЕРШЁН")
+    print(f"  Эксперимент: {run_dir}")
     print(f"  Итераций: {len(results)}")
     print(f"  Причина остановки: {stop_reason}")
-    print(f"  Лог: {log_path}")
+    print(f"  Отчет: {os.path.join(run_dir, 'REPORT.md')}")
     print(f"{'='*60}")
 
     return results
+
+
+def generate_markdown_report(results, config, run_dir):
+    """Генерирует подробный отчет об эксперименте в формате Markdown."""
+    report_path = os.path.join(run_dir, "REPORT.md")
+    
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(f"# Отчет по эксперименту Self-Improving Cascade\n\n")
+        f.write(f"**Дата запуска:** {config['run_id']}\n")
+        f.write(f"**Причина остановки:** {config['stop_reason']}\n\n")
+        
+        f.write("## Конфигурация\n")
+        f.write(f"- **Начальная модель:** `{config['initial_model_dir']}`\n")
+        f.write(f"- **Корпус:** `{config['corpus_path']}`\n")
+        f.write(f"- **LLM Верификатор:** `{config['llm_model_name']}`\n")
+        f.write(f"- **Макс. итераций:** {config['max_iterations']}\n")
+        f.write(f"- **Порог конвергенции:** {config['convergence_threshold']}\n")
+        f.write(f"- **Обучение с нуля:** {config['from_scratch']}\n\n")
+        
+        f.write("## Сводная таблица результатов\n\n")
+        f.write("| Iter | F1 | Acc | Prec | Rec | Overrides | Dataset |\n")
+        f.write("|------|----|-----|------|-----|-----------|---------|\n")
+        
+        for r in results:
+            m = r.metrics
+            cs = r.corpus_stats
+            f.write(f"| {r.iteration} | {m.get('f1', 0):.4f} | {m.get('accuracy', 0):.4f} | "
+                    f"{m.get('precision', 0):.4f} | {m.get('recall', 0):.4f} | "
+                    f"{cs.get('total_overrides', 0)} | {r.dataset_size} |\n")
+        
+        f.write("\n## Детализация по итерациям\n")
+        for r in results:
+            f.write(f"\n### Итерация {r.iteration}\n")
+            f.write(f"- **Путь к модели:** `{r.model_path}`\n")
+            f.write(f"- **Hard Negatives:** `{r.hard_negatives_path}`\n")
+            f.write("- **Статистика корпуса:**\n")
+            for k, v in r.corpus_stats.items():
+                f.write(f"  - {k}: {v}\n")
+    
+    print(f"Markdown-отчет создан: {report_path}")
+
 
 
 def _clean_stats(corpus_stats):

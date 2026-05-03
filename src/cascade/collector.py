@@ -188,7 +188,7 @@ def collect_from_corpus(corpus_path, predictor, verifier,
 
 def save_hard_negatives(hard_negatives, output_path):
     """
-    Сохранить hard negatives в parquet.
+    Сохранить hard negatives в CSV.
 
     Колонки premise/hypothesis/label совместимы с форматом XNLI
     для прямого использования в обучении.
@@ -212,10 +212,10 @@ def save_hard_negatives(hard_negatives, output_path):
         })
 
     df = pd.DataFrame(records)
-    df.to_parquet(output_path, index=False)
+    df.to_csv(output_path, index=False, encoding='utf-8-sig')
     print(f"Hard negatives сохранены: {output_path} ({len(df)} записей)")
 
 
 def load_hard_negatives(path):
     """Загрузить ранее собранные hard negatives."""
-    return pd.read_parquet(path)
+    return pd.read_csv(path)
