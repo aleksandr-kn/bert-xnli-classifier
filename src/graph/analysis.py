@@ -157,3 +157,91 @@ def analyze_contradictions(G, sentences, strategy="weighted"):
         core_sentence=core_sentence,
         contradiction_pairs=pairs,
     )
+
+
+def compute_hallucination_metrics(G):
+    """
+    Вычисляет метрики галлюцинаций для двудольного кросс-документного NLI-графа.
+
+    Вершины оригинала должны иметь тип 'source', а вершины пересказа - 'target'.
+    """
+    summary_nodes = [node for node, data in G.nodes(data=True) if data.get("type") == "target"]
+    M = len(summary_nodes)
+
+    if M == 0:
+        return {
+            "contradiction_ratio": 0.0,
+            "unsupported_ratio": 0.0,
+            "faithfulness_score": 0.0,
+            "coherence_index": 0.0,
+            "details": {}
+        }
+
+    supported_count = 0
+    contradicted_count = 0
+    unsupported_count = 0
+
+    details = {}
+
+    for v in summary_nodes:
+        in_edges = G.in_edges(v, data=True)
+        text_v = G.nodes[v].get("text", "")
+
+        is_supported = False
+        is_contradicted = False
+
+        # Собираем распределение вероятностей по входящим ребрам
+        entail_probas = []
+        contradiction_probas = []
+
+        for u, _, data in in_edges:
+            label = data.get("label")
+            proba = data.get("proba", [0.0, 1.0, 0.0])
+
+            if label == "entailment":
+                is_supported = True
+                entail_probas.append(float(proba[0]))
+            elif label == "contradiction":
+                is_contradicted = True
+                contradiction_probas.append(float(proba[2]))
+
+        if is_supported:
+            supported_count += 1
+        if is_contradicted:
+            contradicted_count += 1
+
+        is_unsupported = not is_supported and not is_contradicted
+        if is_unsupported:
+            unsupported_count += 1
+
+        details[v] = {
+            "text": text_v,
+            "is_supported": is_supported,
+            "is_contradicted": is_contradicted,
+            "is_unsupported": is_unsupported,
+            "max_entail_proba": max(entail_probas) if entail_probas else 0.0,
+            "max_contradiction_proba": max(contradiction_probas) if contradiction_probas else 0.0
+        }
+
+    contradiction_ratio = contradicted_count / M
+    unsupported_ratio = unsupported_count / M
+    faithfulness_score = supported_count / M
+
+    # Индекс когерентности: средний перевес вероятности entailment над contradiction
+    edges = G.edges(data=True)
+    num_edges = len(edges)
+    if num_edges > 0:
+        sum_entail = sum(float(d["proba"][0]) for _, _, d in edges)
+        sum_contradiction = sum(float(d["proba"][2]) for _, _, d in edges)
+        coherence_index = (sum_entail - sum_contradiction) / num_edges
+    else:
+        coherence_index = 0.0
+
+    return {
+        "contradiction_ratio": contradiction_ratio,
+        "unsupported_ratio": unsupported_ratio,
+        "faithfulness_score": faithfulness_score,
+        "coherence_index": coherence_index,
+        "details": details
+    }
+

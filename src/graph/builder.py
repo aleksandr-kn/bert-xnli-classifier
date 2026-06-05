@@ -165,3 +165,82 @@ def graph_from_text(text, predictor, verifier=None, bidirectional=False):
     G = build_nli_graph(sentences, rel_map)
 
     return G, sentences
+
+
+def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, proba_threshold=0.35):
+    """
+    Строит двудольный NLI-граф между оригиналом (source) и пересказом (summary).
+    Направление рёбер: A_i -> B_j (следует ли B_j из A_i).
+
+    Возвращает (nx.DiGraph, list[str], list[str]).
+    """
+    sentences_a = split_sentences(text_source)
+    sentences_b = split_sentences(text_summary)
+
+    G = nx.DiGraph()
+
+    # Узлы оригинала (A) помечаем типом 'source'
+    for i, sent in enumerate(sentences_a):
+        G.add_node(f"A_{i}", text=sent, type="source")
+
+    # Узлы пересказа (B) помечаем типом 'target'
+    for j, sent in enumerate(sentences_b):
+        G.add_node(f"B_{j}", text=sent, type="target")
+
+    if not sentences_a or not sentences_b:
+        return G, sentences_a, sentences_b
+
+    # Формируем кросс-пары A_i -> B_j
+    pairs = []
+    indices = []
+    for i in range(len(sentences_a)):
+        for j in range(len(sentences_b)):
+            pairs.append((sentences_a[i], sentences_b[j]))
+            indices.append((f"A_{i}", f"B_{j}"))
+
+    preds, probas = predictor.predict_batch(pairs)
+    rel_map = {}
+    for (u, v), pred, proba in zip(indices, preds, probas):
+        rel_map[(u, v)] = {"label": int(pred), "proba": proba}
+
+    # Опциональная верификация противоречий через LLM
+    if verifier is not None:
+        # Отбор кандидатов (мягкий отбор по вероятности противоречия)
+        cand_keys = []
+        for k, v in rel_map.items():
+            is_target = (v["label"] == 2)
+            p_contr = float(v["proba"][2])
+            is_uncertain_contr = (p_contr >= proba_threshold)
+            if is_target or is_uncertain_contr:
+                cand_keys.append(k)
+
+        if cand_keys:
+            cand_data = []
+            for k in cand_keys:
+                u, v = k
+                cand_data.append({
+                    "premise": G.nodes[u]["text"],
+                    "hypothesis": G.nodes[v]["text"],
+                    "bert_label": rel_map[k]["label"],
+                    "bert_proba": rel_map[k]["proba"]
+                })
+            # Контекстом служит оригинальный текст (text_source)
+            results = verifier.verify_batch(cand_data, context=text_source)
+            for k, (new_label, confidence, reasoning) in zip(cand_keys, results):
+                rel_map[k]["label"] = new_label
+                rel_map[k]["llm_verified"] = True
+                rel_map[k]["llm_reasoning"] = reasoning
+
+    # Добавляем рёбра в граф
+    for (u, v), info in rel_map.items():
+        edge_attrs = {
+            "label": LABEL_MAP[info["label"]],
+            "proba": info["proba"]
+        }
+        if info.get("llm_verified"):
+            edge_attrs["llm_verified"] = True
+            edge_attrs["llm_reasoning"] = info.get("llm_reasoning", "")
+        G.add_edge(u, v, **edge_attrs)
+
+    return G, sentences_a, sentences_b
+
