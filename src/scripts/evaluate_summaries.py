@@ -162,6 +162,7 @@ def main():
 
     # 6. Запускаем оценку
     results = []
+    all_details = {}
     print("\nНачинаем построение графов и расчет метрик...")
     
     for idx, row in tqdm(df_data.iterrows(), total=len(df_data), desc="Расчет метрик галлюцинаций"):
@@ -181,6 +182,7 @@ def main():
 
             # Вычисляем метрики галлюцинаций
             metrics = compute_hallucination_metrics(G)
+            all_details[text_idx] = metrics["details"]
 
             results.append({
                 "text_idx": text_idx,
@@ -195,11 +197,15 @@ def main():
             print(f"Ошибка при обработке текста {text_idx}: {e}")
             continue
 
-    # 7. Сохраняем детальный отчет
     df_report = pd.DataFrame(results)
     report_path = os.path.join(args.save_dir, "metrics_report.csv")
     df_report.to_csv(report_path, index=False, encoding="utf-8-sig")
     print(f"\nДетальный отчет сохранен в: {report_path}")
+
+    details_path = os.path.join(args.save_dir, "hallucination_details.json")
+    with open(details_path, "w", encoding="utf-8") as f:
+        json.dump(all_details, f, ensure_ascii=False, indent=2)
+    print(f"Построчный разбор галлюцинаций сохранен в: {details_path}")
 
     # 8. Рассчитываем и выводим агрегированную статистику
     summary_stats = {
