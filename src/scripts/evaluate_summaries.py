@@ -7,6 +7,11 @@
 """
 
 import os
+# Перенаправляем кеш Hugging Face на диск F:
+os.environ["HF_HOME"] = "F:/huggingface_cache"
+os.environ["TRANSFORMERS_CACHE"] = "F:/huggingface_cache"
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 import json
 import argparse
 from datetime import datetime
@@ -15,10 +20,6 @@ import numpy as np
 import torch
 from datasets import load_dataset
 from tqdm import tqdm
-
-# Перенаправляем кеш Hugging Face на диск F:
-os.environ["HF_HOME"] = "F:/huggingface_cache"
-os.environ["TRANSFORMERS_CACHE"] = "F:/huggingface_cache"
 
 from src.models.nli_predictor import NLIPredictor
 from src.models.llm_verifier import LLMVerifier
@@ -50,9 +51,9 @@ def generate_summary(text, verifier, max_new_tokens=150):
     """
     Генерирует краткий пересказ текста (1-3 предложения) с помощью Qwen.
     """
-    prompt = f"Сделай очень краткий пересказ (1-3 предложения) следующего текста на русском языке. Пиши только пересказ, без лишних вводных слов:\n\n{text}"
+    prompt = f"Напиши краткий пересказ (1-3 предложения) следующего текста. Выведи ТОЛЬКО текст пересказа на русском языке и ничего больше.\n\nТекст:\n{text}"
     messages = [
-        {"role": "system", "content": "Ты — полезный ассистент, который кратко и точно пересказывает тексты."},
+        {"role": "system", "content": "Ты — профессиональный редактор. Твоя единственная задача — писать сухие, точные и краткие выжимки текстов строго на чистом русском языке. Запрещено использовать другие языки (особенно китайский). Запрещено писать вводные фразы."},
         {"role": "user", "content": prompt}
     ]
     input_text = verifier.tokenizer.apply_chat_template(
@@ -68,6 +69,7 @@ def generate_summary(text, verifier, max_new_tokens=150):
             temperature=None,
             top_p=None,
             top_k=None,
+            repetition_penalty=1.05,
         )
     generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
     summary = verifier.tokenizer.decode(generated_ids, skip_special_tokens=True).strip()

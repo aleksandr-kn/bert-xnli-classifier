@@ -205,9 +205,13 @@ def compute_hallucination_metrics(G):
                 is_contradicted = True
                 contradiction_probas.append(float(proba[2]))
 
+        # Истинное противоречие: если хотя бы одно предложение оригинала противоречит,
+        # И ПРИ ЭТОМ ни одно предложение оригинала не подтверждает (not is_supported).
+        actual_contradicted = is_contradicted and not is_supported
+
         if is_supported:
             supported_count += 1
-        if is_contradicted:
+        if actual_contradicted:
             contradicted_count += 1
 
         is_unsupported = not is_supported and not is_contradicted
@@ -227,15 +231,12 @@ def compute_hallucination_metrics(G):
     unsupported_ratio = unsupported_count / M
     faithfulness_score = supported_count / M
 
-    # Индекс когерентности: средний перевес вероятности entailment над contradiction
-    edges = G.edges(data=True)
-    num_edges = len(edges)
-    if num_edges > 0:
-        sum_entail = sum(float(d["proba"][0]) for _, _, d in edges)
-        sum_contradiction = sum(float(d["proba"][2]) for _, _, d in edges)
-        coherence_index = (sum_entail - sum_contradiction) / num_edges
-    else:
-        coherence_index = 0.0
+    # Индекс когерентности: средний перевес макс. вероятности entailment над contradiction
+    sum_coherence = 0.0
+    for v_data in details.values():
+        sum_coherence += (v_data["max_entail_proba"] - v_data["max_contradiction_proba"])
+    
+    coherence_index = sum_coherence / M if M > 0 else 0.0
 
     return {
         "contradiction_ratio": contradiction_ratio,

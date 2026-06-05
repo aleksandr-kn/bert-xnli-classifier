@@ -12,6 +12,7 @@ BERT-модель используется как быстрый фильтр д
 import os
 # Перенаправляем кеш Hugging Face на диск F: для экономии места на C:
 os.environ["HF_HOME"] = "F:/huggingface_cache"
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 import re
 import torch
