@@ -22,7 +22,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from src.models.nli_predictor import NLIPredictor
-from src.models.llm_verifier import LLMVerifier
+from src.models.verifiers import StrictNLIVerifier as LLMVerifier
 from src.graph.builder import graph_from_two_texts
 from src.graph.analysis import compute_hallucination_metrics
 from src.utils.model_registry import get_model_path

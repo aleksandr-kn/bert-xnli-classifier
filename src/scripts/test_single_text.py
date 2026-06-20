@@ -21,7 +21,7 @@ def main(verbose=False):
 
     verifier = None
     if LLM_MODEL_NAME:
-        from src.models.llm_verifier import LLMVerifier
+        from src.models.verifiers import StrictNLIVerifier as LLMVerifier
         verifier = LLMVerifier(LLM_MODEL_NAME)
 
     G, sentences = graph_from_text(CUSTOM_TEXT, predictor, verifier=verifier)

@@ -16,7 +16,7 @@ from datetime import datetime
 import torch
 
 from src.models.nli_predictor import NLIPredictor
-from src.models.llm_verifier import LLMVerifier
+from src.models.verifiers import StrictNLIVerifier as LLMVerifier
 from src.cascade.collector import collect_from_corpus, save_hard_negatives
 from src.cascade.trainer import train_iteration
 

@@ -167,7 +167,7 @@ def graph_from_text(text, predictor, verifier=None, bidirectional=False):
     return G, sentences
 
 
-def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, proba_threshold=0.35):
+def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, proba_threshold=0.70):
     """
     Строит двудольный NLI-граф между оригиналом (source) и пересказом (summary).
     Направление рёбер: A_i -> B_j (следует ли B_j из A_i).
@@ -205,14 +205,38 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
 
     # Опциональная верификация противоречий через LLM
     if verifier is not None:
-        # Отбор кандидатов (мягкий отбор по вероятности противоречия)
+        # 1. Найдем предложения пересказа (B_j), имеющие хотя бы одно уверенное entailment
+        b_entailed = set()
+        for (u, v), v_info in rel_map.items():
+            if v_info["label"] == 0:  # 0 - entailment
+                b_entailed.add(v)
+                
+        # 2. Отбор кандидатов
         cand_keys = []
-        for k, v in rel_map.items():
-            is_target = (v["label"] == 2)
-            p_contr = float(v["proba"][2])
+        cand_keys_set = set()
+        best_cand_for_b = {}
+        
+        for k, v_info in rel_map.items():
+            u, v = k
+            is_target = (v_info["label"] == 2)
+            p_contr = float(v_info["proba"][2])
             is_uncertain_contr = (p_contr >= proba_threshold)
+            
+            # Явные или неуверенные противоречия от BERT берем всегда
             if is_target or is_uncertain_contr:
                 cand_keys.append(k)
+                cand_keys_set.add(k)
+                
+            # Ищем самую подозрительную связь для неподтвержденных предложений (neutral)
+            if v not in b_entailed:
+                if v not in best_cand_for_b or p_contr > best_cand_for_b[v][1]:
+                    best_cand_for_b[v] = (k, p_contr)
+                    
+        # Добавляем "лучшие" neutral-кандидаты в пул верификации (Spotter)
+        for v, (k, p_contr) in best_cand_for_b.items():
+            if k not in cand_keys_set:
+                cand_keys.append(k)
+                cand_keys_set.add(k)
 
         if cand_keys:
             cand_data = []

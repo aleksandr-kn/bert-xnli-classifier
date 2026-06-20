@@ -100,7 +100,7 @@ def main():
     # Создаём LLM-верификатор, если задано имя модели
     verifier = None
     if LLM_MODEL_NAME:
-        from src.models.llm_verifier import LLMVerifier
+        from src.models.verifiers import StrictNLIVerifier as LLMVerifier
         print(f"Загрузка LLM-верификатора: {LLM_MODEL_NAME} ...")
         verifier = LLMVerifier(LLM_MODEL_NAME)
         print("LLM-верификатор загружен.")

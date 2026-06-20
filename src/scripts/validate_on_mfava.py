@@ -28,7 +28,14 @@ def parse_args():
                         help="Путь к подготовленному CSV файлу")
     parser.add_argument("--model", type=str, default="rubert-large-xnli",
                         help="Путь к NLI модели (slug или локальный)")
-    parser.add_argument("--proba_threshold", type=float, default=0.35,
+    parser.add_argument("--use_llm_cascade", action="store_true",
+                        help="Включить LLM-верификатор (Qwen) для повышения Recall")
+    parser.add_argument("--llm_model", type=str, default="Qwen/Qwen2.5-7B-Instruct",
+                        help="Модель для верификатора")
+    parser.add_argument("--verifier_type", type=str, default="HallucinationSpotter",
+                        choices=["StrictNLI", "HallucinationSpotter"],
+                        help="Тип верификатора: StrictNLI или HallucinationSpotter")
+    parser.add_argument("--proba_threshold", type=float, default=0.70,
                         help="Мягкий порог вероятности противоречия")
     parser.add_argument("--save_dir", type=str, default="outputs/validation",
                         help="Директория для сохранения результатов предсказаний")
@@ -51,6 +58,16 @@ def main():
     print(f"Загрузка NLI-предиктора из {model_path}...")
     predictor = NLIPredictor(model_path)
     
+    verifier = None
+    if args.use_llm_cascade:
+        if args.verifier_type == "HallucinationSpotter":
+            from src.models.verifiers import HallucinationSpotterVerifier as VerifierCls
+        else:
+            from src.models.verifiers import StrictNLIVerifier as VerifierCls
+            
+        print(f"Загрузка LLM-верификатора ({args.verifier_type}) из {args.llm_model}...")
+        verifier = VerifierCls(model_name=args.llm_model)
+    
     results = []
     
     print("\nНачинаем валидацию (Inference)...")
@@ -70,7 +87,7 @@ def main():
                 text_source=str(source),
                 text_summary=str(summary),
                 predictor=predictor,
-                verifier=None, # Для чистой оценки базового графа верификатор пока отключаем
+                verifier=verifier,
                 proba_threshold=args.proba_threshold
             )
             
