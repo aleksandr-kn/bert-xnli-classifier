@@ -211,32 +211,25 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
             if v_info["label"] == 0:  # 0 - entailment
                 b_entailed.add(v)
                 
-        # 2. Отбор кандидатов
+        # 2. Отбор кандидатов (Top-1 стратегия для радикального ускорения)
         cand_keys = []
-        cand_keys_set = set()
         best_cand_for_b = {}
         
         for k, v_info in rel_map.items():
             u, v = k
-            is_target = (v_info["label"] == 2)
-            p_contr = float(v_info["proba"][2])
-            is_uncertain_contr = (p_contr >= proba_threshold)
-            
-            # Явные или неуверенные противоречия от BERT берем всегда
-            if is_target or is_uncertain_contr:
-                cand_keys.append(k)
-                cand_keys_set.add(k)
+            # ОПТИМИЗАЦИЯ 1: Если фраза уже подтверждена оригиналом, не тратим квоты LLM
+            if v in b_entailed:
+                continue
                 
-            # Ищем самую подозрительную связь для неподтвержденных предложений (neutral)
-            if v not in b_entailed:
-                if v not in best_cand_for_b or p_contr > best_cand_for_b[v][1]:
-                    best_cand_for_b[v] = (k, p_contr)
-                    
-        # Добавляем "лучшие" neutral-кандидаты в пул верификации (Spotter)
+            p_contr = float(v_info["proba"][2])
+            
+            # Ищем самую сильную вероятность противоречия для каждого B_j
+            if v not in best_cand_for_b or p_contr > best_cand_for_b[v][1]:
+                best_cand_for_b[v] = (k, p_contr)
+                
+        # ОПТИМИЗАЦИЯ 2: Берем только Top-1 кандидата для каждого неподтвержденного предложения
         for v, (k, p_contr) in best_cand_for_b.items():
-            if k not in cand_keys_set:
-                cand_keys.append(k)
-                cand_keys_set.add(k)
+            cand_keys.append(k)
 
         if cand_keys:
             cand_data = []
@@ -250,10 +243,20 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
                 })
             # Контекстом служит оригинальный текст (text_source)
             results = verifier.verify_batch(cand_data, context=text_source)
+            
             for k, (new_label, confidence, reasoning) in zip(cand_keys, results):
+                u, v = k
                 rel_map[k]["label"] = new_label
                 rel_map[k]["llm_verified"] = True
                 rel_map[k]["llm_reasoning"] = reasoning
+                
+                # ОПТИМИЗАЦИЯ 3: Если LLM (которая видит ВЕСЬ текст) решила, что это НЕ галлюцинация,
+                # гасим все остальные ложные противоречия от BERT для этого же B_j.
+                # Иначе анализ графа всё равно посчитает B_j галлюцинацией из-за непроверенных ребер.
+                if new_label != 2:
+                    for (other_u, other_v), other_info in rel_map.items():
+                        if other_v == v and other_info["label"] == 2:
+                            other_info["label"] = 1  # Сбрасываем в neutral
 
     # Добавляем рёбра в граф
     for (u, v), info in rel_map.items():

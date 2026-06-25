@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--verifier_type", type=str, default="HallucinationSpotter",
                         choices=["StrictNLI", "HallucinationSpotter"],
                         help="Тип верификатора: StrictNLI или HallucinationSpotter")
-    parser.add_argument("--proba_threshold", type=float, default=0.70,
+    parser.add_argument("--proba_threshold", type=float, default=0.30,
                         help="Мягкий порог вероятности противоречия")
     parser.add_argument("--save_dir", type=str, default="outputs/validation",
                         help="Директория для сохранения результатов предсказаний")
