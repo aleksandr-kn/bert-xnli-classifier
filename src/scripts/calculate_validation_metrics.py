@@ -10,7 +10,7 @@
 import os
 import pandas as pd
 import argparse
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, f1_score, accuracy_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, f1_score, accuracy_score, matthews_corrcoef
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Расчет итоговых метрик качества")
@@ -55,12 +55,16 @@ def main():
     
     # 2. Метрики классификации
     acc = accuracy_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
+    f1_binary = f1_score(y_true, y_pred)
+    f1_macro = f1_score(y_true, y_pred, average='macro')
     roc_auc = roc_auc_score(y_true, y_score)
+    mcc = matthews_corrcoef(y_true, y_pred)
     
     print("--- Главные Метрики ---")
     print(f"Accuracy:  {acc:.4f}")
-    print(f"F1-score:  {f1:.4f}")
+    print(f"F1-score (Binary): {f1_binary:.4f}")
+    print(f"Macro-F1:  {f1_macro:.4f}")
+    print(f"MCC:       {mcc:.4f}")
     print(f"ROC-AUC:   {roc_auc:.4f}\n")
     
     # 3. Детальный отчет
