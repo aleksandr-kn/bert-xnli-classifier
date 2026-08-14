@@ -205,9 +205,9 @@ def compute_hallucination_metrics(G):
                 is_contradicted = True
                 contradiction_probas.append(float(proba[2]))
 
-        # Истинное противоречие: если хотя бы одно предложение оригинала противоречит,
-        # И ПРИ ЭТОМ ни одно предложение оригинала не подтверждает (not is_supported).
-        actual_contradicted = is_contradicted and not is_supported
+        # Истинное противоречие: если хотя бы одно предложение оригинала противоречит
+        # (Щит из entailment убран по новой логике)
+        actual_contradicted = is_contradicted
 
         if is_supported:
             supported_count += 1

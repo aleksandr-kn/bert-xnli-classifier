@@ -94,8 +94,9 @@ def main():
             metrics = compute_hallucination_metrics(G)
             
             # Наша бинарная логика предсказания:
-            # Если Contradiction Ratio > 0, граф считает, что это галлюцинация
-            predicted_label = 1 if metrics["contradiction_ratio"] > 0 else 0
+            # Галлюцинация = есть прямое противоречие ИЛИ нет никаких подтверждений (отсебятина)
+            is_hallucination = (metrics["contradiction_ratio"] > 0) or (metrics["unsupported_ratio"] > 0)
+            predicted_label = 1 if is_hallucination else 0
             
             results.append({
                 "id": text_id,
