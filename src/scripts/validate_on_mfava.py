@@ -93,9 +93,11 @@ def main():
             
             metrics = compute_hallucination_metrics(G)
             
-            # Наша бинарная логика предсказания:
-            # Галлюцинация = есть прямое противоречие ИЛИ нет никаких подтверждений (отсебятина)
-            is_hallucination = (metrics["contradiction_ratio"] > 0) or (metrics["unsupported_ratio"] > 0)
+            # Грамотное математическое решение (Soft Thresholding):
+            # Используем индекс когерентности (max_entail_proba - max_contradiction_proba).
+            # Если перевес в сторону подтверждения меньше 0.01 (или уходит в минус из-за сильного противоречия),
+            # то мы бракуем текст. Это спасает от ложных тревог, вызванных случайными выбросами вероятностей.
+            is_hallucination = metrics["coherence_index"] < 0.01
             predicted_label = 1 if is_hallucination else 0
             
             results.append({
