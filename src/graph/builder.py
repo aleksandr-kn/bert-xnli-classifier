@@ -205,31 +205,32 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
 
     # Опциональная верификация противоречий через LLM
     if verifier is not None:
-        # 1. Найдем предложения пересказа (B_j), имеющие хотя бы одно уверенное entailment
-        b_entailed = set()
+        b_metrics = {}
         for (u, v), v_info in rel_map.items():
-            if v_info["label"] == 0:  # 0 - entailment
-                b_entailed.add(v)
+            if v not in b_metrics:
+                b_metrics[v] = {"max_entail": 0.0, "max_contra": 0.0, "best_contra_k": None}
                 
-        # 2. Отбор кандидатов (Top-1 стратегия для радикального ускорения)
-        cand_keys = []
-        best_cand_for_b = {}
-        
-        for k, v_info in rel_map.items():
-            u, v = k
-            # ОПТИМИЗАЦИЯ 1: Если фраза уже подтверждена оригиналом, не тратим квоты LLM
-            if v in b_entailed:
-                continue
-                
-            p_contr = float(v_info["proba"][2])
+            p_entail = float(v_info["proba"][0])
+            p_contra = float(v_info["proba"][2])
             
-            # Ищем самую сильную вероятность противоречия для каждого B_j
-            if v not in best_cand_for_b or p_contr > best_cand_for_b[v][1]:
-                best_cand_for_b[v] = (k, p_contr)
-                
-        # ОПТИМИЗАЦИЯ 2: Берем только Top-1 кандидата для каждого неподтвержденного предложения
-        for v, (k, p_contr) in best_cand_for_b.items():
-            cand_keys.append(k)
+            if p_entail > b_metrics[v]["max_entail"]:
+                b_metrics[v]["max_entail"] = p_entail
+            if p_contra > b_metrics[v]["max_contra"]:
+                b_metrics[v]["max_contra"] = p_contra
+                b_metrics[v]["best_contra_k"] = (u, v)
+
+        cand_keys = []
+        for v, metrics in b_metrics.items():
+            coherence = metrics["max_entail"] - metrics["max_contra"]
+            # ОПТИМИЗАЦИЯ КАСКАДА: Расширенная "Зона неопределенности"
+            # Если BERT не железобетонно уверен (coherence < 0.20), отдаем на проверку.
+            # Это позволит LLM спасти больше ложных тревог и отловить больше хитрых галлюцинаций.
+            if coherence < 0.20:
+                k_to_verify = metrics["best_contra_k"]
+                if k_to_verify is None:
+                    # Если везде нули (отсебятина), берем первый попавшийся узел A_i для этого B_j
+                    k_to_verify = next(k for k in rel_map.keys() if k[1] == v)
+                cand_keys.append(k_to_verify)
 
         if cand_keys:
             cand_data = []
@@ -241,7 +242,7 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
                     "bert_label": rel_map[k]["label"],
                     "bert_proba": rel_map[k]["proba"]
                 })
-            # Контекстом служит оригинальный текст (text_source)
+            # Контекстом служит оригинальный текст, чтобы LLM ловила экстринсивные галлюцинации
             results = verifier.verify_batch(cand_data, context=text_source)
             
             for k, (new_label, confidence, reasoning) in zip(cand_keys, results):
@@ -250,13 +251,14 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
                 rel_map[k]["llm_verified"] = True
                 rel_map[k]["llm_reasoning"] = reasoning
                 
-                # ОПТИМИЗАЦИЯ 3: Если LLM (которая видит ВЕСЬ текст) решила, что это НЕ галлюцинация,
-                # гасим все остальные ложные противоречия от BERT для этого же B_j.
-                # Иначе анализ графа всё равно посчитает B_j галлюцинацией из-за непроверенных ребер.
-                if new_label != 2:
-                    for (other_u, other_v), other_info in rel_map.items():
-                        if other_v == v and other_info["label"] == 2:
-                            other_info["label"] = 1  # Сбрасываем в neutral
+                # КРИТИЧЕСКИЙ ФИКС: Перезаписываем сырые вероятности под вердикт LLM,
+                # чтобы Индекс Когерентности в анализе графа сработал корректно!
+                if new_label == 0:    # Entailment
+                    rel_map[k]["proba"] = [0.99, 0.01, 0.00]
+                elif new_label == 2:  # Contradiction
+                    rel_map[k]["proba"] = [0.00, 0.01, 0.99]
+                else:                 # Neutral
+                    rel_map[k]["proba"] = [0.00, 0.99, 0.01]
 
     # Добавляем рёбра в граф
     for (u, v), info in rel_map.items():
