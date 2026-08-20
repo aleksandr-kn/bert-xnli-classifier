@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 import os
 os.environ["HF_HOME"] = "F:/huggingface_cache"
-os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["TRANSFORMERS_CACHE"] = "F:/huggingface_cache"
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 _LABEL_TO_ID = {"entailment": 0, "neutral": 1, "contradiction": 2}
 _ID_TO_LABEL = {v: k for k, v in _LABEL_TO_ID.items()}
 
 class BaseLLMVerifier:
     """
-    Базовый класс для всех LLM-верификаторов.
+    Базовый класс для всех LLM-верификаторов на базе HuggingFace Transformers.
     Берет на себя загрузку модели в 4-bit, токенизацию и генерацию.
     """
     def __init__(self, model_name, device=None, max_new_tokens=512):
@@ -21,14 +20,26 @@ class BaseLLMVerifier:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         try:
-            from transformers import BitsAndBytesConfig
-            bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config, device_map={"": 0})
-            print("LLM загружена в 4-bit квантизации.")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True
+            )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto"
+            )
+            print("LLM загружена в 4-bit (NF4) квантизации.")
         except Exception as e:
-            print(f"4-bit квантизация недоступна ({e}), загрузка в fp16...")
-            self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
-            print("LLM загружена в fp16.")
+            print(f"4-bit квантизация недоступна ({e}), загрузка в auto/fp16...")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype="auto",
+                device_map="auto"
+            )
+            print("LLM загружена.")
 
         self.model.eval()
 

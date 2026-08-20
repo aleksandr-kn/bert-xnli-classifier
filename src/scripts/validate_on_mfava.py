@@ -30,11 +30,11 @@ def parse_args():
                         help="Путь к NLI модели (slug или локальный)")
     parser.add_argument("--use_llm_cascade", action="store_true",
                         help="Включить LLM-верификатор (Qwen) для повышения Recall")
-    parser.add_argument("--llm_model", type=str, default="Qwen/Qwen2.5-7B-Instruct",
-                        help="Модель для верификатора")
-    parser.add_argument("--verifier_type", type=str, default="HallucinationSpotter",
-                        choices=["StrictNLI", "HallucinationSpotter"],
-                        help="Тип верификатора: StrictNLI или HallucinationSpotter")
+    parser.add_argument("--llm_model", type=str, default="qwen2.5:14b",
+                        help="Модель для верификатора (например, qwen2.5:14b для Ollama или Qwen/Qwen2.5-14B-Instruct для HF)")
+    parser.add_argument("--verifier_type", type=str, default="Ollama",
+                        choices=["Ollama", "HallucinationSpotter", "StrictNLI"],
+                        help="Тип верификатора: Ollama (быстрый C++ API), HallucinationSpotter (HF 4-bit) или StrictNLI")
     parser.add_argument("--proba_threshold", type=float, default=0.30,
                         help="Мягкий порог вероятности противоречия")
     parser.add_argument("--save_dir", type=str, default="outputs/validation",
@@ -60,12 +60,14 @@ def main():
     
     verifier = None
     if args.use_llm_cascade:
-        if args.verifier_type == "HallucinationSpotter":
+        if args.verifier_type == "Ollama":
+            from src.models.verifiers import OllamaVerifier as VerifierCls
+        elif args.verifier_type == "HallucinationSpotter":
             from src.models.verifiers import HallucinationSpotterVerifier as VerifierCls
         else:
             from src.models.verifiers import StrictNLIVerifier as VerifierCls
             
-        print(f"Загрузка LLM-верификатора ({args.verifier_type}) из {args.llm_model}...")
+        print(f"Загрузка LLM-верификатора ({args.verifier_type}) с моделью {args.llm_model}...")
         verifier = VerifierCls(model_name=args.llm_model)
     
     results = []
