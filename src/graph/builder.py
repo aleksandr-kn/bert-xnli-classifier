@@ -223,9 +223,9 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
         for v, metrics in b_metrics.items():
             coherence = metrics["max_entail"] - metrics["max_contra"]
             # ОПТИМИЗАЦИЯ КАСКАДА: Расширенная "Зона неопределенности"
-            # Если BERT не железобетонно уверен (coherence < 0.20), отдаем на проверку.
+            # Если BERT не железобетонно уверен (coherence < 0.40), отдаем на проверку.
             # Это позволит LLM спасти больше ложных тревог и отловить больше хитрых галлюцинаций.
-            if coherence < 0.20:
+            if coherence < 0.40:
                 k_to_verify = metrics["best_contra_k"]
                 if k_to_verify is None:
                     # Если везде нули (отсебятина), берем первый попавшийся узел A_i для этого B_j
@@ -270,6 +270,9 @@ def graph_from_two_texts(text_source, text_summary, predictor, verifier=None, pr
             edge_attrs["llm_verified"] = True
             edge_attrs["llm_reasoning"] = info.get("llm_reasoning", "")
         G.add_edge(u, v, **edge_attrs)
+
+    # Сохраняем статистику вызовов LLM для аналитики
+    G.graph["llm_calls"] = len(cand_keys) if verifier and cand_keys else 0
 
     return G, sentences_a, sentences_b
 

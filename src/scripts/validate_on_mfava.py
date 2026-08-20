@@ -70,6 +70,10 @@ def main():
     
     results = []
     
+    # Счетчики экономии вычислений
+    total_sentences_processed = 0
+    total_llm_calls = 0
+    
     print("\nНачинаем валидацию (Inference)...")
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Анализ текстов"):
         text_id = row.get("id", idx)
@@ -92,6 +96,10 @@ def main():
             )
             
             metrics = compute_hallucination_metrics(G)
+            
+            # Собираем статистику маршрутизации
+            total_sentences_processed += len(sentences_b)
+            total_llm_calls += G.graph.get("llm_calls", 0)
             
             # Грамотное математическое решение (Soft Thresholding):
             # Используем индекс когерентности (max_entail_proba - max_contradiction_proba).
@@ -118,7 +126,23 @@ def main():
     save_path = os.path.join(args.save_dir, "validation_predictions.csv")
     df_results.to_csv(save_path, index=False, encoding="utf-8-sig")
     
+    # Сохраняем статистику вычислений (Compute Reduction)
+    stats = {
+        "total_sentences_processed": total_sentences_processed,
+        "total_llm_calls_made": total_llm_calls,
+        "llm_calls_saved": total_sentences_processed - total_llm_calls,
+        "routing_rate_percent": round((total_llm_calls / total_sentences_processed) * 100, 2) if total_sentences_processed > 0 else 0,
+        "compute_reduction_percent": round(((total_sentences_processed - total_llm_calls) / total_sentences_processed) * 100, 2) if total_sentences_processed > 0 else 0
+    }
+    
+    stats_path = os.path.join(args.save_dir, "routing_statistics.json")
+    with open(stats_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=4, ensure_ascii=False)
+        
     print(f"\nИнференс завершен! Результаты предсказаний сохранены в {save_path}")
+    print(f"Статистика вычислений (Compute Reduction) сохранена в {stats_path}")
+    print(f"Отправлено в LLM: {stats['total_llm_calls_made']} из {stats['total_sentences_processed']} предложений.")
+    print(f"Сэкономлено {stats['compute_reduction_percent']}% ресурсов LLM!")
     print("Теперь можно запускать расчет ROC-AUC и F1 (Шаг 3).")
 
 if __name__ == "__main__":
